@@ -62,7 +62,7 @@
   // ---- calculator -------------------------------------------------------------------------
   function init(cfg) {
     var $ = function (id) { return document.getElementById(id); };
-    var home = $("f-home"), din = $("f-in"), dout = $("f-out"), guests = $("f-guests"), tier = $("f-tier");
+    var home = $("f-home"), din = $("f-in"), dout = $("f-out"), guests = $("f-guests");
     var quote = $("quote"), status = $("calc-status");
     var today = new Date().toISOString().slice(0, 10);
     din.min = today;
@@ -86,11 +86,11 @@
       var a = parse(din.value), b = parse(dout.value);
       var nights = Math.round((b - a) / 86400000);
       if (nights < 1) return { error: "Departure needs to be after arrival." };
-      var h = cfg.homes[home.value], t = tier.value;
+      var h = cfg.homes[home.value];
       var groups = {}, order = [], total = 0;
       for (var i = 0; i < nights; i++) {
         var d = new Date(a.getFullYear(), a.getMonth(), a.getDate() + i);
-        var s = seasonOf(h.city, d), rate = h[t][s.key];
+        var s = seasonOf(h.city, d), rate = h.rate[s.key];
         var g = groups[s.key];
         if (!g) { g = groups[s.key] = { label: s.label, rate: rate, n: 0 }; order.push(s.key); }
         g.n++; total += rate;
@@ -110,7 +110,7 @@
       });
       rows += "<tr><td>Cleaning fee</td><td>" + money(q.cleaning) + "</td></tr>";
       rows += '<tr class="total"><td>Estimated total</td><td>' + money(q.total) + "</td></tr>";
-      quote.innerHTML = "<table>" + rows + "</table>" + (q.over ? '<p class="fine" style="margin:.6rem 0 0">' + q.h.name + " sleeps " + q.sleeps + ". Let us know how you'd like to handle the extra guests.</p>" : "");
+      quote.innerHTML = "<table>" + rows + "</table>" + '<p class="fine" style="margin:.6rem 0 0">Taxes are not included. We will add the applicable ones when we confirm.</p>' + (q.over ? '<p class="fine" style="margin:.6rem 0 0">' + q.h.name + " sleeps " + q.sleeps + ". Let us know how you'd like to handle the extra guests.</p>" : "");
       return q;
     }
 
@@ -120,13 +120,13 @@
       var lines = ["Family and friends request", "",
         "Name: " + ($("f-name").value || ""), "Home: " + q.h.name,
         "Dates: " + din.value + " to " + dout.value + " (" + q.nights + " nights)",
-        "Guests: " + guests.value, "Rate: " + (tier.value === "family" ? "Family" : "Friends"),
-        "Estimated total: " + money(q.total) + " (nightly " + money(q.nightly) + " + cleaning " + money(q.cleaning) + ")", "",
+        "Guests: " + guests.value,
+        "Estimated total: " + money(q.total) + " (nightly " + money(q.nightly) + " + cleaning " + money(q.cleaning) + "), before taxes", "",
         $("f-note").value || ""];
       return lines.join("\n");
     }
 
-    [home, din, dout, guests, tier].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
+    [home, din, dout, guests].forEach(function (el) { el.addEventListener("input", render); el.addEventListener("change", render); });
     din.addEventListener("change", function () {
       dout.min = din.value || today;
       if (dout.value && dout.value <= din.value) dout.value = "";
