@@ -25,7 +25,7 @@ jobs:
           if [ -d img ]; then mkdir -p _site/img; cp -r img/. _site/img/; fi
           if [ -d vanhornstays-site-part2/img ]; then cp -r vanhornstays-site-part2/img/. _site/img/; fi
           touch _site/.nojekyll
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: _site
       - id: d
