@@ -21,6 +21,7 @@ jobs:
           cp -r vanhornstays-site-part1/. _site/
           if [ -d "vanhornstays-site-part1 3" ]; then cp -r "vanhornstays-site-part1 3"/. _site/; fi
           for d in vanhornstays-overlay*; do if [ -d "$d" ]; then cp -r "$d"/. _site/; fi; done
+          for d in vh-update*; do if [ -d "$d" ]; then cp -r "$d"/. _site/; fi; done
           if [ -d img ]; then mkdir -p _site/img; cp -r img/. _site/img/; fi
           if [ -d vanhornstays-site-part2/img ]; then cp -r vanhornstays-site-part2/img/. _site/img/; fi
           touch _site/.nojekyll
