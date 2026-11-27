@@ -57,7 +57,7 @@
   function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
   function show(r){
     var h = "<h2 style='margin-top:0'>" + esc(r.home) + "</h2><dl>" +
-      "<dt>Guest</dt><dd>" + esc(r.name) + "</dd><dt>Contact</dt><dd>" + esc(r.contact) + "</dd>" +
+      "<dt>Guest</dt><dd>" + esc(r.name) + "</dd><dt>Phone</dt><dd>" + (r.phone ? "<a href='tel:" + esc(r.phone.replace(/[^\d+]/g, "")) + "'>" + esc(r.phone) + "</a>" : "not given") + "</dd><dt>Email</dt><dd>" + esc(r.contact) + "</dd>" +
       "<dt>Check-in</dt><dd>" + esc(r.checkin) + "</dd><dt>Check-out</dt><dd>" + esc(r.checkout) + "</dd>" +
       "<dt>Guests</dt><dd>" + esc(r.guests) + "</dd><dt>Estimate</dt><dd>" + esc(r.estimate || "n/a") + " before taxes</dd>" +
       (r.note ? "<dt>Note</dt><dd>" + esc(r.note) + "</dd>" : "") + "</dl>";
