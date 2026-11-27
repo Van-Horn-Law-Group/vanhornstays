@@ -105,6 +105,8 @@
       return list[0];
     }
     function money(n) { return "$" + n.toLocaleString("en-US"); }
+    function money2(n) { return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    var PET_FEE = 25, TAX_RATE = { "pittsburgh": 0.14, "fort-lauderdale": 0.13 };
     function parse(s) { var p = s.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
     function iso(d) { return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
     function pretty(s) { return parse(s).toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
@@ -188,7 +190,10 @@
         g.n++; total += rate;
       }
       var guestsN = parseInt(guests.value, 10) || 1;
-      return { nights: nights, groups: groups, order: order, nightly: total, cleaning: h.cleaning, total: total + h.cleaning, h: h,
+      var dogs = Math.max(0, Math.min(2, parseInt(($("f-dogs") || {}).value, 10) || 0)), pet = dogs * PET_FEE;
+      var sub = total + h.cleaning + pet, rate = TAX_RATE[h.city] || 0, tax = Math.round(sub * rate * 100) / 100;
+      return { nights: nights, groups: groups, order: order, nightly: total, cleaning: h.cleaning, dogs: dogs, pet: pet, sub: sub,
+        taxRate: rate, tax: tax, total: Math.round((sub + tax) * 100) / 100, h: h,
         over: guestsN > h.sleeps, sleeps: h.sleeps, clash: busy ? clashes(home.value, din.value, dout.value) : [] };
     }
 
@@ -203,7 +208,9 @@
         rows += "<tr><td>" + g.n + (g.n === 1 ? " night" : " nights") + " at " + money(g.rate) + " (" + g.label.toLowerCase() + ")</td><td>" + money(g.n * g.rate) + "</td></tr>";
       });
       rows += "<tr><td>Cleaning fee</td><td>" + money(q.cleaning) + "</td></tr>";
-      rows += '<tr class="total"><td>Estimated total</td><td>' + money(q.total) + "</td></tr>";
+      if (q.dogs) rows += "<tr><td>Pet fee (" + q.dogs + (q.dogs === 1 ? " dog" : " dogs") + " at " + money(PET_FEE) + ")</td><td>" + money(q.pet) + "</td></tr>";
+      rows += "<tr><td>Hotel taxes (" + Math.round(q.taxRate * 100) + "%)</td><td>" + money2(q.tax) + "</td></tr>";
+      rows += '<tr class="total"><td>Total</td><td>' + money2(q.total) + "</td></tr>";
       var warn = "";
       if (q.clash.length) {
         warn = '<p class="warn" style="margin:.6rem 0 0">' + q.h.name + " is already booked " +
@@ -211,7 +218,7 @@
           ". Pick open dates on the calendar.</p>";
         if (sendBtn) sendBtn.disabled = true;
       }
-      quote.innerHTML = "<table>" + rows + "</table>" + warn + '<p class="fine" style="margin:.6rem 0 0">Taxes are not included. We will add the applicable ones when we confirm.</p>' + (q.over ? '<p class="fine" style="margin:.6rem 0 0">' + q.h.name + " sleeps " + q.sleeps + ". Let us know how you'd like to handle the extra guests.</p>" : "");
+      quote.innerHTML = "<table>" + rows + "</table>" + warn + '<p class="fine" style="margin:.6rem 0 0">Once we confirm, we\'ll email you this total with how to pay by Zelle.</p>' + (q.over ? '<p class="fine" style="margin:.6rem 0 0">' + q.h.name + " sleeps " + q.sleeps + ". Let us know how you'd like to handle the extra guests.</p>" : "");
       return q;
     }
 
@@ -219,8 +226,8 @@
       var lines = ["Family and friends request", "",
         "Name: " + ($("f-name").value || ""), "Phone: " + (($("f-phone") || {}).value || ""), "Email: " + (($("f-contact") || {}).value || ""), "Home: " + q.h.name,
         "Dates: " + din.value + " to " + dout.value + " (" + q.nights + " nights)",
-        "Guests: " + guests.value,
-        "Estimated total: " + money(q.total) + " (nightly " + money(q.nightly) + " + cleaning " + money(q.cleaning) + "), before taxes", "",
+        "Guests: " + guests.value, "Dogs: " + q.dogs,
+        "Total: " + money2(q.total) + " (nightly " + money(q.nightly) + " + cleaning " + money(q.cleaning) + (q.dogs ? " + pet fee " + money(q.pet) : "") + " + taxes " + money2(q.tax) + ")", "",
         $("f-note").value || ""];
       return lines.join("\n");
     }
@@ -230,7 +237,7 @@
       status.textContent = "We couldn't send it from the page, so your email app should open with the request ready to send.";
     }
 
-    [home, din, dout, guests].forEach(function (el) { el.addEventListener("input", function () { drawCal(); render(); }); el.addEventListener("change", function () { drawCal(); render(); }); });
+    [home, din, dout, guests].concat($("f-dogs") ? [$("f-dogs")] : []).forEach(function (el) { el.addEventListener("input", function () { drawCal(); render(); }); el.addEventListener("change", function () { drawCal(); render(); }); });
     din.addEventListener("change", function () {
       dout.min = din.value || today;
       if (dout.value && dout.value <= din.value) dout.value = "";
@@ -252,17 +259,18 @@
       sending = true; sendBtn.disabled = true; sendBtn.textContent = "Sending…"; status.textContent = "";
       fetch(SYNC_URL, {
         method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "request", k: key, home: home.value, "in": din.value, out: dout.value, guests: guests.value,
-          name: name, phone: phone, contact: contact, note: $("f-note").value || "", estimate: money(q.total) + " (" + q.nights + " nights + cleaning)" })
+        body: JSON.stringify({ action: "request", k: key, home: home.value, "in": din.value, out: dout.value, guests: guests.value, dogs: q.dogs,
+          name: name, phone: phone, contact: contact, note: $("f-note").value || "", estimate: money2(q.total) + " (" + q.nights + " nights, cleaning" + (q.dogs ? ", pet fee" : "") + " and taxes)" })
       }).then(function (r) { return r.json(); }).then(function (j) {
         if (j.ok) {
-          status.innerHTML = "<b>Sent.</b> Gaby and Chad have your request and will confirm with you at " + contact.replace(/[<>&]/g, "") + " or " + phone.replace(/[<>&]/g, "") + ".";
+          status.innerHTML = "<b>Sent.</b> Gaby and Chad have your request. Once they confirm, you'll get an email at " + contact.replace(/[<>&]/g, "") + " with your total and how to pay.";
           sendBtn.textContent = "Request sent";
           return;
         }
         if (j.error === "booked") { status.textContent = "Someone just booked some of those nights. Pick other dates."; loadBusy(); }
         else if (j.error === "past") status.textContent = "Arrival can't be in the past.";
         else if (j.error === "contact") status.textContent = "Add your name, cell phone and email so we can confirm.";
+        else if (j.error === "email") status.textContent = "Add your email so we can send your confirmation.";
         else if (j.error === "phone") status.textContent = "Add a cell phone number (with area code) so we can reach you.";
         else mailFallback(q);
         sendBtn.disabled = false; sendBtn.textContent = "Send request";
