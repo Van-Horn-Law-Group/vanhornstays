@@ -217,7 +217,7 @@
 
     function summary(q) {
       var lines = ["Family and friends request", "",
-        "Name: " + ($("f-name").value || ""), "Contact: " + (($("f-contact") || {}).value || ""), "Home: " + q.h.name,
+        "Name: " + ($("f-name").value || ""), "Phone: " + (($("f-phone") || {}).value || ""), "Email: " + (($("f-contact") || {}).value || ""), "Home: " + q.h.name,
         "Dates: " + din.value + " to " + dout.value + " (" + q.nights + " nights)",
         "Guests: " + guests.value,
         "Estimated total: " + money(q.total) + " (nightly " + money(q.nightly) + " + cleaning " + money(q.cleaning) + "), before taxes", "",
@@ -244,22 +244,26 @@
       if (!q) { status.textContent = "Add your dates first."; return; }
       if (q.clash.length) { status.textContent = "Those dates aren't open. Pick open dates on the calendar."; return; }
       var name = ($("f-name").value || "").trim(), contact = (($("f-contact") || {}).value || "").trim();
-      if (!name || !contact) { status.textContent = "Add your name and an email or phone number so we can confirm."; return; }
+      var phone = (($("f-phone") || {}).value || "").trim(), digits = phone.replace(/\D/g, "");
+      if (!name) { status.textContent = "Add your name."; $("f-name").focus(); return; }
+      if (digits.length < 10 || digits.length > 15) { status.textContent = "Add a cell phone number (with area code) so we can reach you."; if ($("f-phone")) $("f-phone").focus(); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact)) { status.textContent = "Add your email so we can send your confirmation."; $("f-contact").focus(); return; }
       if (!SYNC_URL || SYNC_URL.indexOf("__") === 0) { mailFallback(q); return; }
       sending = true; sendBtn.disabled = true; sendBtn.textContent = "Sending…"; status.textContent = "";
       fetch(SYNC_URL, {
         method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({ action: "request", k: key, home: home.value, "in": din.value, out: dout.value, guests: guests.value,
-          name: name, contact: contact, note: $("f-note").value || "", estimate: money(q.total) + " (" + q.nights + " nights + cleaning)" })
+          name: name, phone: phone, contact: contact, note: $("f-note").value || "", estimate: money(q.total) + " (" + q.nights + " nights + cleaning)" })
       }).then(function (r) { return r.json(); }).then(function (j) {
         if (j.ok) {
-          status.innerHTML = "<b>Sent.</b> Gaby and Chad have your request and will confirm with you at " + contact.replace(/[<>&]/g, "") + ".";
+          status.innerHTML = "<b>Sent.</b> Gaby and Chad have your request and will confirm with you at " + contact.replace(/[<>&]/g, "") + " or " + phone.replace(/[<>&]/g, "") + ".";
           sendBtn.textContent = "Request sent";
           return;
         }
         if (j.error === "booked") { status.textContent = "Someone just booked some of those nights. Pick other dates."; loadBusy(); }
         else if (j.error === "past") status.textContent = "Arrival can't be in the past.";
-        else if (j.error === "contact") status.textContent = "Add your name and an email or phone number so we can confirm.";
+        else if (j.error === "contact") status.textContent = "Add your name, cell phone and email so we can confirm.";
+        else if (j.error === "phone") status.textContent = "Add a cell phone number (with area code) so we can reach you.";
         else mailFallback(q);
         sendBtn.disabled = false; sendBtn.textContent = "Send request";
       }).catch(function () {
