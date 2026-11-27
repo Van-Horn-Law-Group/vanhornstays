@@ -59,14 +59,55 @@
     var h = "<h2 style='margin-top:0'>" + esc(r.home) + "</h2><dl>" +
       "<dt>Guest</dt><dd>" + esc(r.name) + "</dd><dt>Phone</dt><dd>" + (r.phone ? "<a href='tel:" + esc(r.phone.replace(/[^\d+]/g, "")) + "'>" + esc(r.phone) + "</a>" : "not given") + "</dd><dt>Email</dt><dd>" + esc(r.contact) + "</dd>" +
       "<dt>Check-in</dt><dd>" + esc(r.checkin) + "</dd><dt>Check-out</dt><dd>" + esc(r.checkout) + "</dd>" +
-      "<dt>Guests</dt><dd>" + esc(r.guests) + "</dd><dt>Estimate</dt><dd>" + esc(r.estimate || "n/a") + " before taxes</dd>" +
+      "<dt>Guests</dt><dd>" + esc(r.guests) + (r.dogs ? ", " + r.dogs + (r.dogs == 1 ? " dog" : " dogs") : "") + "</dd><dt>Total</dt><dd>" + esc(r.total) + " with fees and taxes</dd>" +
+      (r.due ? "<dt>Due</dt><dd>" + esc(r.due) + "</dd>" : "") +
+      (r.status === "confirmed" ? "<dt>Paid</dt><dd>" + (r.paid ? "Yes, marked " + esc(r.paidAt) : "<b>Not yet</b>") + "</dd><dt>Door code</dt><dd>" + (r.code ? esc(r.code) : "needs their cell") + "</dd>" : "") +
       (r.note ? "<dt>Note</dt><dd>" + esc(r.note) + "</dd>" : "") + "</dl>";
+    if (r.status === "confirmed") { manage(r, h); return; }
     if (r.status !== "pending") { card.innerHTML = h + "<p class='adm-msg'>Already " + esc(r.status) + ".</p>"; return; }
-    h += r.clash ? "<p class='adm-msg adm-warn'>Heads up: these dates now overlap a booking on the calendar.</p>" : "<p class='adm-msg'>The dates are still open.</p>";
-    h += "<div class='adm-actions'><button class='btn btn-primary' id='yes'>Confirm and block the dates</button><button class='btn btn-line' id='no'>Decline</button></div><p class='adm-msg' id='out' role='status'></p>";
+    h += r.clash ? "<p class='adm-msg adm-warn'>Heads up: these dates now overlap a booking on the calendar.</p>" : "<p class='adm-msg'>The dates are still open. Confirming blocks them and emails " + esc(r.name.split(" ")[0]) + " the total, Zelle details and arrival info right away.</p>";
+    h += "<div class='adm-actions'><button class='btn btn-primary' id='yes'>Confirm and email the guest</button><button class='btn btn-line' id='no'>Decline</button></div><p class='adm-msg' id='out' role='status'></p>";
     card.innerHTML = h;
     document.getElementById("yes").onclick = function(){ decide("confirm"); };
     document.getElementById("no").onclick = function(){ decide("decline"); };
+  }
+  function post(body){
+    body.id = id; body.sig = sig;
+    return fetch(SYNC, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify(body)}).then(function(r){return r.json();});
+  }
+  function manage(r, h){
+    h += "<div class='adm-actions'>" + (r.paid ? "" : "<button class='btn btn-primary' id='paid'>Mark paid</button>") +
+      "<button class='btn btn-line' id='cancel'>Cancel stay</button></div>";
+    if (!r.code) h += "<div class='adm-field'><label for='ph'>Guest's cell (sets the door code)</label><input id='ph' type='tel' placeholder='(555) 555-5555'>" +
+      "<div class='adm-actions'><button class='btn btn-line' id='savePh'>Save cell</button></div></div>";
+    h += "<p class='adm-msg' id='out' role='status'></p><p class='adm-note'>Automatic from here: payment reminder 2 days before the due date, a door-code email to Gaby 2 days before check-in, the guest's arrival email the day before and a checkout reminder that morning.</p>";
+    card.innerHTML = h;
+    var out = document.getElementById("out"), armed = false;
+    var pb = document.getElementById("paid");
+    if (pb) pb.onclick = function(){
+      pb.disabled = true; out.textContent = "Marking paid…";
+      post({action:"paid"}).then(function(j){
+        if (j.ok) { out.innerHTML = "<b>Marked paid.</b> " + esc(j.name) + " got a payment-received email, and the stay is in the tax sheet."; pb.remove(); }
+        else { out.textContent = j.error === "alreadypaid" ? "Already marked paid." : "That didn't work (" + (j.error || "error") + ")."; pb.disabled = false; }
+      }).catch(function(){ out.textContent = "Couldn't reach the service. Try again."; pb.disabled = false; });
+    };
+    var cb = document.getElementById("cancel");
+    cb.onclick = function(){
+      if (!armed) { armed = true; cb.textContent = "Tap again to cancel the stay"; out.textContent = "This frees the dates and stops all guest emails. The guest is not emailed; let them know yourself."; return; }
+      cb.disabled = true; out.textContent = "Cancelling…";
+      post({action:"cancel"}).then(function(j){
+        if (j.ok) { card.innerHTML = h.split("<div class='adm-actions'>")[0] + "<p class='adm-msg'><b>Cancelled.</b> The dates are open again and no more emails will go to " + esc(j.name) + "." + (j.paid ? " They had paid: refund by Zelle and delete their row in the tax sheet." : "") + "</p>"; }
+        else { out.textContent = "That didn't work (" + (j.error || "error") + ")."; cb.disabled = false; }
+      }).catch(function(){ out.textContent = "Couldn't reach the service. Try again."; cb.disabled = false; });
+    };
+    var sp = document.getElementById("savePh");
+    if (sp) sp.onclick = function(){
+      sp.disabled = true;
+      post({action:"phone", phone: document.getElementById("ph").value}).then(function(j){
+        if (j.ok) { out.innerHTML = "<b>Saved.</b> Door code will be " + esc(j.code) + "; it goes in their arrival email."; }
+        else { out.textContent = j.error === "phone" ? "Enter a 10-digit cell number." : "That didn't work (" + (j.error || "error") + ")."; sp.disabled = false; }
+      }).catch(function(){ out.textContent = "Couldn't reach the service. Try again."; sp.disabled = false; });
+    };
   }
   function decide(d){
     var out = document.getElementById("out");
@@ -75,9 +116,10 @@
     fetch(SYNC, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"decide", id:id, sig:sig, d:d})})
       .then(function(r){return r.json();}).then(function(j){
         if (j.ok && j.status === "confirmed") {
-          out.innerHTML = "<b>Confirmed.</b> " + esc(j.home) + " is blocked " + esc(j.checkin) + " to " + esc(j.checkout) + " on the family page. " +
+          out.innerHTML = "<b>Confirmed.</b> " + esc(j.home) + " is blocked " + esc(j.checkin) + " to " + esc(j.checkout) + ". " +
+            (j.emailed ? esc(j.name) + " was emailed the " + esc(j.total) + " total, due " + esc(j.due) + ". " : "<span class='adm-warn'>The guest email didn't go out; Chad and Gaby got an alert.</span> ") +
             (j.evolve ? "Gaby got an email to add the Evolve owner block." : "Airbnb picks up the block within a few hours.") +
-            "<br>Next: send " + esc(j.name) + " payment details and check-in info at " + esc(j.contact) + ".";
+            "<br>Refresh this page to mark it paid when the Zelle lands.";
         } else if (j.ok && j.status === "declined") {
           out.innerHTML = "<b>Declined.</b> Nothing was blocked. Let " + esc(j.name) + " know at " + esc(j.contact) + ".";
         } else if (j.error === "booked") {
